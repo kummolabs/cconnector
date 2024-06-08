@@ -18,9 +18,10 @@ func NewToken(configPath string) *Token {
 
 func (t *Token) Generate() *cobra.Command {
 	return &cobra.Command{
-		Use:   "token:generate",
-		Short: "Generate bearer authentication token for current host",
-		Long:  "A command to generate bearer authentication token for current host, to verify incoming request from manager",
+		Use:     "token:generate",
+		Short:   "Generate bearer authentication token for current host",
+		Long:    "A command to generate bearer authentication token for current host, to verify incoming request from manager",
+		GroupID: "token",
 		Run: func(cmd *cobra.Command, args []string) {
 			if currentConfig, err := getConfig(t.configPath); err != nil {
 				fmt.Printf("Failed to identify cconector config, you can initiate your config by running `cconector config:initiate`. Errors:\n%v\n", err)
@@ -46,10 +47,11 @@ func (t *Token) Generate() *cobra.Command {
 
 func (t *Token) Manager() *cobra.Command {
 	return &cobra.Command{
-		Use:   "token:manager",
-		Short: "Set manager token",
-		Long:  "A command to set manager token.",
-		Args:  cobra.ExactArgs(1),
+		Use:     "token:manager",
+		Short:   "Set manager token",
+		Long:    "A command to set manager token.",
+		GroupID: "token",
+		Args:    cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			if currentConfig, err := getConfig(t.configPath); err != nil {
 				fmt.Printf("Failed to identify cconector config, you can initiate your config by running `cconector config:initiate`. Errors:\n%v\n", err)

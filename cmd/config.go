@@ -18,9 +18,10 @@ func NewConfig(configPath string) *Config {
 
 func (c *Config) Initiate() *cobra.Command {
 	return &cobra.Command{
-		Use:   "config:initiate",
-		Short: "Initiate required config for ccontainer",
-		Long:  "A command to initiate config.yaml for ccontainer with default value. Be careful, it will replace all existing value.",
+		Use:     "config:initiate",
+		Short:   "Initiate required config for ccontainer",
+		Long:    "A command to initiate config.yaml for ccontainer with default value. Be careful, it will replace all existing value.",
+		GroupID: "config",
 		Run: func(cmd *cobra.Command, args []string) {
 			if err := createDefaultConfig(c.configPath); err != nil {
 				fmt.Printf("Failed to initiate default config. Errors:\n%v\n", err)
@@ -34,9 +35,10 @@ func (c *Config) Initiate() *cobra.Command {
 
 func (c *Config) Config() *cobra.Command {
 	return &cobra.Command{
-		Use:   "config",
-		Short: "Get current config for ccontainer",
-		Long:  "A command to get current defined config for cconector",
+		Use:     "config",
+		Short:   "Get current config for ccontainer",
+		Long:    "A command to get current defined config for cconector",
+		GroupID: "config",
 		Run: func(cmd *cobra.Command, args []string) {
 			if currentConfig, err := getConfig(c.configPath); err != nil {
 				fmt.Printf("Failed to initiate default config. Errors:\n%v\n", err)
