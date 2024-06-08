@@ -31,3 +31,20 @@ func (c *Config) Initiate() *cobra.Command {
 		},
 	}
 }
+
+func (c *Config) Config() *cobra.Command {
+	return &cobra.Command{
+		Use:   "config",
+		Short: "Get current config for ccontainer",
+		Long:  "A command to get current defined config for cconector",
+		Run: func(cmd *cobra.Command, args []string) {
+			if currentConfig, err := getConfig(c.configPath); err != nil {
+				fmt.Printf("Failed to initiate default config. Errors:\n%v\n", err)
+				return
+			} else {
+				fmt.Println("Host token:", currentConfig.HostToken)
+				fmt.Println("Manager token:", currentConfig.ManagerToken)
+			}
+		},
+	}
+}

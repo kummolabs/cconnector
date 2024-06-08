@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -11,10 +13,11 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-var ErrDockerSocketNotExists = fmt.Errorf("docker socket is not exists")
-var ErrDockerSocketCantBeReach = fmt.Errorf("docker socket cannot be reached")
+var ErrDockerSocketNotExists = fmt.Errorf("docker socket does not exist")
+var ErrDockerSocketCantBeReached = fmt.Errorf("docker socket cannot be reached")
 var ErrConfigFileNotFound = fmt.Errorf("config file not found")
 var ErrWritingDefaultConfig = fmt.Errorf("error writing default config")
+var ErrEditingConfig = fmt.Errorf("error editing config")
 
 func checkDockerSocketRunning() error {
 	dockerSocket := "/var/run/docker.sock"
@@ -30,7 +33,7 @@ func checkDockerSocketRunning() error {
 		}
 	}()
 	if err != nil {
-		return ErrDockerSocketCantBeReach
+		return ErrDockerSocketCantBeReached
 	}
 
 	return nil
@@ -88,4 +91,66 @@ func ensureConfig(configPath string) error {
 	}
 
 	return nil
+}
+
+func getConfig(configPath string) (*entity.CconnectorConfig, error) {
+	err := checkConfig(configPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Read the existing config file
+	configData, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal the config data into a struct
+	currentConfig := &entity.CconnectorConfig{}
+	if err := yaml.Unmarshal(configData, currentConfig); err != nil {
+		return nil, err
+	}
+
+	return currentConfig, nil
+}
+
+// editConfig edits an existing config file with given new values.
+func editConfig(configPath string, newConfig entity.CconnectorConfig) error {
+	// Check if the config file exists
+	err := checkConfig(configPath)
+	if err != nil {
+		return errors.Join(ErrEditingConfig, err)
+	}
+
+	// Marshal the modified struct back to YAML
+	updatedConfigData, err := yaml.Marshal(&newConfig)
+	if err != nil {
+		return errors.Join(ErrEditingConfig, err)
+	}
+
+	// Write the updated YAML back to the configuration file
+	err = os.WriteFile(configPath, updatedConfigData, 0644)
+	if err != nil {
+		return errors.Join(ErrEditingConfig, err)
+	}
+
+	return nil
+}
+
+func generateBearerToken(length int) (string, error) {
+	if length <= 0 {
+		return "", errors.New("token length must be greater than zero")
+	}
+
+	// Generate random bytes
+	tokenBytes := make([]byte, length)
+	_, err := rand.Read(tokenBytes)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate random bytes: %w", err)
+	}
+
+	// Encode the bytes to a hexadecimal string
+	token := hex.EncodeToString(tokenBytes)
+
+	return token, nil
 }
