@@ -8,6 +8,13 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+// Requests
+
+type ContainerCreationRequest struct {
+}
+
+// Handler
+
 type Container struct {
 	dockerClient *client.Client
 }
@@ -26,3 +33,8 @@ func (c *Container) List(echoContext echo.Context) error {
 
 	return echoContext.JSON(http.StatusOK, containers)
 }
+
+// func (c *Container) Create(echoContext echo.Context) error {
+//
+// 	return echoContext.JSON(http.StatusOK, nil)
+// }

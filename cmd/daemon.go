@@ -71,6 +71,9 @@ func (d *Daemon) Start() *cobra.Command {
 			containerHandler := handler.NewContainer(cli)
 			withAuthEngine.GET("/containers", containerHandler.List)
 
+			volumeHandler := handler.NewVolume(cli)
+			withAuthEngine.GET("/volumes", volumeHandler.List)
+
 			// Start the server in a goroutine
 			go func() {
 				if err := e.Start(":30000"); err != nil && err != http.ErrServerClosed {
