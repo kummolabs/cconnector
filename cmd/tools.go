@@ -79,19 +79,20 @@ func createDefaultConfig(configPath string) error {
 	return nil
 }
 
+// temporary commented
 // ensureConfig checks if the config file exists, and creates it if it doesn't.
-func ensureConfig(configPath string) error {
-	err := checkConfig(configPath)
-	if err != nil && err != ErrConfigFileNotFound {
-		return err
-	}
+// func ensureConfig(configPath string) error {
+// 	err := checkConfig(configPath)
+// 	if err != nil && err != ErrConfigFileNotFound {
+// 		return err
+// 	}
 
-	if err := createDefaultConfig(configPath); err != nil {
-		return err
-	}
+// 	if err := createDefaultConfig(configPath); err != nil {
+// 		return err
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
 func getConfig(configPath string) (*entity.CconnectorConfig, error) {
 	err := checkConfig(configPath)
