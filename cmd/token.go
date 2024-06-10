@@ -68,3 +68,27 @@ func (t *Token) Manager() *cobra.Command {
 		},
 	}
 }
+
+func (t *Token) Reset() *cobra.Command {
+	return &cobra.Command{
+		Use:     "token:reset",
+		Short:   "Reset manager token and generate new token host token in the process",
+		GroupID: "token",
+		Run: func(cmd *cobra.Command, args []string) {
+			t.Generate().Run(cmd, args)
+
+			if currentConfig, err := getConfig(t.configPath); err != nil {
+				fmt.Printf("Failed to identify cconector config, you can initiate your config by running `cconector config:initiate`. Errors:\n%v\n", err)
+				return
+			} else {
+				currentConfig.ManagerToken = ""
+				if err := editConfig(t.configPath, *currentConfig); err != nil {
+					fmt.Printf("Failed to updating new config. Errors:\n%v\n", err)
+					return
+				}
+
+				fmt.Println("Manager token is succesfully reset...")
+			}
+		},
+	}
+}

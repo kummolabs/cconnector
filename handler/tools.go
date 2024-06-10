@@ -8,6 +8,12 @@ func BadRequestResponseBody(message string) map[string]any {
 	}
 }
 
+func UnprocessableEntityResponseBody(message string) map[string]any {
+	return map[string]any{
+		"message": fmt.Sprintf("Entity cannot be processed because of: `%s`", message),
+	}
+}
+
 func InternalServerErrorResponseBody() map[string]any {
 	return map[string]any{
 		"message": "Internal server error",

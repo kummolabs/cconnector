@@ -37,6 +37,7 @@ func main() {
 		configCmd.Initiate(),
 		tokenCmd.Generate(),
 		tokenCmd.Manager(),
+		tokenCmd.Reset(),
 		daemonCmd.Start(),
 	)
 	_ = cconnector.Execute()

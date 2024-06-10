@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/docker/docker/client"
+	"github.com/insomnius/agent/entity"
 	"github.com/insomnius/agent/handler"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -61,12 +62,27 @@ func (d *Daemon) Start() *cobra.Command {
 				}),
 			)
 
+			withAuthEngine.GET("/authentication-status", func(c echo.Context) error {
+				return c.String(http.StatusOK, "OK\n")
+			})
+
 			// Initiate docker clients
 			cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 			if err != nil {
 				fmt.Println("Failed to create Docker client:", err)
 				return
 			}
+
+			editConfigWrapper := func(newConfig entity.CconnectorConfig) error {
+				return editConfig(d.configPath, newConfig)
+			}
+
+			getConfigWrapper := func() (*entity.CconnectorConfig, error) {
+				return getConfig(d.configPath)
+			}
+
+			managerHandler := handler.NewManager(editConfigWrapper, getConfigWrapper)
+			withAuthEngine.POST("/managers/claims", managerHandler.Claim)
 
 			containerHandler := handler.NewContainer(cli)
 			withAuthEngine.GET("/containers", containerHandler.List)
