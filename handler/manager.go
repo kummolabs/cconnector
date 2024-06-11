@@ -40,7 +40,7 @@ func (m *Manager) Claim(c echo.Context) error {
 	}
 
 	if defaultConfig.ManagerToken != "" {
-		return c.JSON(http.StatusInternalServerError, UnprocessableEntityResponseBody("manager token already claimed"))
+		return c.JSON(http.StatusUnprocessableEntity, UnprocessableEntityResponseBody("manager token already claimed"))
 	}
 
 	if err := m.editConfigFunction(entity.CconnectorConfig{
