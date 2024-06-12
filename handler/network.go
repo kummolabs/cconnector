@@ -50,9 +50,19 @@ func (n *Network) Create(c echo.Context) error {
 		return err
 	}
 
+	networkInspect, err := n.dockerClient.NetworkInspect(c.Request().Context(), network.ID, types.NetworkInspectOptions{})
+	if err != nil {
+		log.Err(err).
+			Any("create_options", createOptions).
+			Any("network", network).
+			Msg("error get network inspect")
+
+		c.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
+
+		return err
+	}
+
 	return c.JSON(http.StatusOK, map[string]any{
-		"data": map[string]any{
-			"id": network.ID,
-		},
+		"data": networkInspect,
 	})
 }
