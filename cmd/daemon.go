@@ -84,6 +84,9 @@ func (d *Daemon) Start() *cobra.Command {
 			managerHandler := handler.NewManager(editConfigWrapper, getConfigWrapper)
 			withAuthEngine.POST("/managers/claims", managerHandler.Claim)
 
+			networkHandler := handler.NewNetwork(cli)
+			withAuthEngine.POST("/networks", networkHandler.Create)
+
 			containerHandler := handler.NewContainer(cli)
 			withAuthEngine.GET("/containers", containerHandler.List)
 

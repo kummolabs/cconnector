@@ -10,7 +10,7 @@ import (
 )
 
 type VolumeCreationRequest struct {
-	Name string
+	Labels Label `json:"labels"`
 }
 
 type Volume struct {
@@ -22,12 +22,13 @@ func NewVolume(dockerClient *client.Client) *Volume {
 }
 
 func (v *Volume) List(c echo.Context) error {
-	containers, err := v.dockerClient.VolumeList(c.Request().Context(), volume.ListOptions{})
+	volumes, err := v.dockerClient.VolumeList(c.Request().Context(), volume.ListOptions{})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
 	}
 
-	return c.JSON(http.StatusOK, containers)
+	// TODO: use json api standard
+	return c.JSON(http.StatusOK, volumes)
 }
 
 func (v *Volume) Create(c echo.Context) error {
@@ -42,6 +43,6 @@ func (v *Volume) Create(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
 	}
 
-	// v.dockerClient
+	// TODO: use json api standard
 	return c.JSON(http.StatusOK, vol)
 }

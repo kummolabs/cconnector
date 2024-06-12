@@ -31,10 +31,6 @@ func (c *Container) List(echoContext echo.Context) error {
 		})
 	}
 
+	// TODO: use json api standard
 	return echoContext.JSON(http.StatusOK, containers)
 }
-
-// func (c *Container) Create(echoContext echo.Context) error {
-//
-// 	return echoContext.JSON(http.StatusOK, nil)
-// }
