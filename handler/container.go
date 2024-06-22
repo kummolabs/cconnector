@@ -11,6 +11,11 @@ import (
 // Requests
 
 type ContainerCreationRequest struct {
+	Name        string   `json:"string"`
+	ImageSource string   `json:"image_source"`
+	ImageTag    string   `json:"image_tag"`
+	Labels      Label    `json:"labels"`
+	Networks    []string `json:"networks"` // sets of id of networks
 }
 
 // Handler
@@ -21,6 +26,10 @@ type Container struct {
 
 func NewContainer(dockerClient *client.Client) *Container {
 	return &Container{dockerClient: dockerClient}
+}
+
+func (c *Container) Create(echoContext echo.Context) error {
+	return nil
 }
 
 func (c *Container) List(echoContext echo.Context) error {

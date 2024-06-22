@@ -10,7 +10,10 @@ import (
 )
 
 type VolumeCreationRequest struct {
-	Labels Label `json:"labels"`
+	Name       string            `json:"string"`
+	Driver     string            `json:"driver"`
+	DriverOpts map[string]string `json:"driver_opts"`
+	Labels     Label             `json:"labels"`
 }
 
 type Volume struct {
@@ -32,12 +35,20 @@ func (v *Volume) List(c echo.Context) error {
 }
 
 func (v *Volume) Create(c echo.Context) error {
-	createOptions := volume.CreateOptions{}
+	creationRequest := VolumeCreationRequest{}
 
-	err := json.NewDecoder(c.Request().Body).Decode(&createOptions)
+	err := json.NewDecoder(c.Request().Body).Decode(&creationRequest)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, BadRequestResponseBody("body contains invalid json format"))
 	}
+
+	createOptions := volume.CreateOptions{
+		Name:       creationRequest.Name,
+		Driver:     creationRequest.Driver,
+		DriverOpts: creationRequest.DriverOpts,
+		Labels:     creationRequest.Labels,
+	}
+
 	vol, err := v.dockerClient.VolumeCreate(c.Request().Context(), createOptions)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())

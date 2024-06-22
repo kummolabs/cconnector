@@ -95,7 +95,12 @@ func (d *Daemon) Start() *cobra.Command {
 
 			// Start the server in a goroutine
 			go func() {
-				if err := e.Start(":30000"); err != nil && err != http.ErrServerClosed {
+				port := "30000"
+				if os.Getenv("PORT") != "" {
+					port = os.Getenv("PORT")
+				}
+
+				if err := e.Start(fmt.Sprintf(":%s", port)); err != nil && err != http.ErrServerClosed {
 					fmt.Println("Error shutting down the server. Error:", err)
 				}
 			}()
