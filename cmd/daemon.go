@@ -92,6 +92,7 @@ func (d *Daemon) Start() *cobra.Command {
 
 			volumeHandler := handler.NewVolume(cli)
 			withAuthEngine.GET("/volumes", volumeHandler.List)
+			withAuthEngine.POST("/volumes", volumeHandler.Create)
 
 			// Start the server in a goroutine
 			go func() {
