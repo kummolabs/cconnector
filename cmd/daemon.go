@@ -94,6 +94,9 @@ func (d *Daemon) Start() *cobra.Command {
 			withAuthEngine.GET("/volumes", volumeHandler.List)
 			withAuthEngine.POST("/volumes", volumeHandler.Create)
 
+			imageHandler := handler.NewImage(cli)
+			withAuthEngine.POST("/images", imageHandler.Create)
+
 			// Start the server in a goroutine
 			go func() {
 				port := "30000"
