@@ -54,7 +54,6 @@ func (i *Image) Create(c echo.Context) error {
 
 	buf := make([]byte, 4096)
 	for {
-		fmt.Println("DEBUG")
 		n, err := rc.Read(buf)
 		if n > 0 {
 			if _, err := c.Response().Write(buf[:n]); err != nil {
