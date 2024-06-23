@@ -7,10 +7,11 @@ import (
 	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
 	"github.com/labstack/echo/v4"
+	"github.com/rs/zerolog/log"
 )
 
 type VolumeCreationRequest struct {
-	Name       string            `json:"string"`
+	Name       string            `json:"name"`
 	Driver     string            `json:"driver"`
 	DriverOpts map[string]string `json:"driver_opts"`
 	Labels     Label             `json:"labels"`
@@ -39,7 +40,8 @@ func (v *Volume) Create(c echo.Context) error {
 
 	err := json.NewDecoder(c.Request().Body).Decode(&creationRequest)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, BadRequestResponseBody("body contains invalid json format"))
+		_ = c.JSON(http.StatusBadRequest, BadRequestResponseBody("body contains invalid json format"))
+		return err
 	}
 
 	createOptions := volume.CreateOptions{
@@ -51,9 +53,27 @@ func (v *Volume) Create(c echo.Context) error {
 
 	vol, err := v.dockerClient.VolumeCreate(c.Request().Context(), createOptions)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
+		log.Err(err).
+			Any("create_options", createOptions).
+			Msg("error creating volume")
+
+		_ = c.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
+		return err
 	}
 
-	// TODO: use json api standard
-	return c.JSON(http.StatusOK, vol)
+	volInspect, err := v.dockerClient.VolumeInspect(c.Request().Context(), vol.Name)
+	if err != nil {
+		log.Err(err).
+			Any("create_options", createOptions).
+			Any("volume", vol).
+			Msg("error get volume inspect")
+
+		c.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
+
+		return err
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"data": volInspect,
+	})
 }

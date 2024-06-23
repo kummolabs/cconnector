@@ -1,11 +1,14 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/labstack/echo/v4"
+	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 // Requests
@@ -16,6 +19,10 @@ type ContainerCreationRequest struct {
 	ImageTag    string   `json:"image_tag"`
 	Labels      Label    `json:"labels"`
 	Networks    []string `json:"networks"` // sets of id of networks
+	Volumes     []struct {
+		Name        string `json:"name"`
+		BindingPath string `json:"binding_path"`
+	} `json:"volumes"`
 }
 
 // Handler
@@ -29,6 +36,22 @@ func NewContainer(dockerClient *client.Client) *Container {
 }
 
 func (c *Container) Create(echoContext echo.Context) error {
+	creationRequest := ContainerCreationRequest{}
+
+	err := json.NewDecoder(echoContext.Request().Body).Decode(&creationRequest)
+	if err != nil {
+		_ = echoContext.JSON(http.StatusBadRequest, BadRequestResponseBody("body contains invalid json format"))
+		return err
+	}
+
+	c.dockerClient.ContainerCreate(
+		echoContext.Request().Context(),
+		&container.Config{},
+		&container.HostConfig{},
+		&network.NetworkingConfig{},
+		&v1.Platform{},
+		creationRequest.Name,
+	)
 	return nil
 }
 
