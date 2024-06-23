@@ -2,13 +2,14 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/labstack/echo/v4"
-	v1 "github.com/opencontainers/image-spec/specs-go/v1"
+	v1 "github.com/moby/docker-image-spec/specs-go/v1"
 )
 
 // Requests
@@ -23,6 +24,10 @@ type ContainerCreationRequest struct {
 		Name        string `json:"name"`
 		BindingPath string `json:"binding_path"`
 	} `json:"volumes"`
+	Environments []struct {
+		Key   string `json:"key"`
+		Value string `json:"value"`
+	} `json:"environments"`
 }
 
 // Handler
@@ -44,12 +49,26 @@ func (c *Container) Create(echoContext echo.Context) error {
 		return err
 	}
 
+	imageRef := fmt.Sprintf("%s:%s", creationRequest.ImageSource, creationRequest.ImageTag)
+
+	envVariables := []string{}
+	for _, env := range creationRequest.Environments {
+		envVariables = append(envVariables, fmt.Sprintf(`%s="%s"`, env.Key, env.Value))
+	}
+
 	c.dockerClient.ContainerCreate(
 		echoContext.Request().Context(),
-		&container.Config{},
+		&container.Config{
+			Image:       imageRef,
+			Env:         envVariables,
+			Labels:      creationRequest.Labels,
+			Healthcheck: &v1.HealthcheckConfig{},
+		}, // currently nil
 		&container.HostConfig{},
-		&network.NetworkingConfig{},
-		&v1.Platform{},
+		&network.NetworkingConfig{
+			EndpointsConfig: map[string]*network.EndpointSettings{},
+		}, // currently nil
+		nil, // currently nil
 		creationRequest.Name,
 	)
 	return nil
