@@ -96,7 +96,7 @@ func (c *Container) Create(echoContext echo.Context) error {
 		}
 	}
 
-	_, err = c.dockerClient.ContainerCreate(
+	createResp, err := c.dockerClient.ContainerCreate(
 		echoContext.Request().Context(),
 		&container.Config{
 			Image:       imageRef,
@@ -123,7 +123,7 @@ func (c *Container) Create(echoContext echo.Context) error {
 		return err
 	}
 
-	_ = echoContext.JSON(http.StatusOK, nil)
+	_ = echoContext.JSON(http.StatusOK, createResp)
 	return nil
 }
 
