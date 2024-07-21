@@ -6,8 +6,8 @@ import (
 	"net/http"
 
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
+	"github.com/docker/go-connections/nat"
 	"github.com/labstack/echo/v4"
 	v1 "github.com/moby/docker-image-spec/specs-go/v1"
 	"github.com/rs/zerolog"
@@ -24,12 +24,19 @@ type ContainerCreationRequest struct {
 	Networks    []string `json:"networks"` // sets of id of networks
 	Volumes     []struct {
 		Name        string `json:"name"`
-		BindingPath string `json:"binding_path"`
+		Destination string `json:"destination"`
 	} `json:"volumes"`
 	Environments []struct {
 		Key   string `json:"key"`
 		Value string `json:"value"`
 	} `json:"environments"`
+	PortBindings []struct {
+		Protocol string `json:"protocol"`
+		Mapping  []struct {
+			HostIP   string `json:"host_ip"`
+			HostPort string `json:"host_port"`
+		}
+	} `json:"port_bindings"`
 }
 
 // Handler
@@ -62,6 +69,25 @@ func (c *Container) Create(echoContext echo.Context) error {
 		envVariables = append(envVariables, fmt.Sprintf(`%s="%s"`, env.Key, env.Value))
 	}
 
+	volumeBinds := []string{}
+	for _, bind := range creationRequest.Volumes {
+		volumeBinds = append(envVariables, fmt.Sprintf(`%s:%s`, bind.Name, bind.Destination))
+	}
+
+	portBindings := nat.PortMap{}
+	for _, network := range creationRequest.PortBindings {
+		if _, ok := portBindings[nat.Port(network.Protocol)]; !ok {
+			portBindings[nat.Port(network.Protocol)] = []nat.PortBinding{}
+		}
+
+		for _, binding := range network.Mapping {
+			portBindings[nat.Port(network.Protocol)] = append(portBindings[nat.Port(network.Protocol)], nat.PortBinding{
+				HostIP:   binding.HostIP,
+				HostPort: binding.HostPort,
+			})
+		}
+	}
+
 	_, err = c.dockerClient.ContainerCreate(
 		echoContext.Request().Context(),
 		&container.Config{
@@ -69,12 +95,13 @@ func (c *Container) Create(echoContext echo.Context) error {
 			Env:         envVariables,
 			Labels:      creationRequest.Labels,
 			Healthcheck: &v1.HealthcheckConfig{},
-		}, // currently nil
-		&container.HostConfig{},
-		&network.NetworkingConfig{
-			EndpointsConfig: map[string]*network.EndpointSettings{},
-		}, // currently nil
-		nil, // currently nil
+		}, // currently nil, since there are no current usecases
+		&container.HostConfig{
+			Binds:        volumeBinds,
+			PortBindings: portBindings,
+		}, // currently nil, since there are no current usecases
+		nil, // currently nil, since there are no current usecases
+		nil, // currently nil, since there are no current usecases
 		creationRequest.Name,
 	)
 	if err != nil {
