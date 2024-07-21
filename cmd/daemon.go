@@ -89,6 +89,7 @@ func (d *Daemon) Start() *cobra.Command {
 
 			containerHandler := handler.NewContainer(cli)
 			withAuthEngine.GET("/containers", containerHandler.List)
+			withAuthEngine.POST("/containers", containerHandler.Create)
 
 			volumeHandler := handler.NewVolume(cli)
 			withAuthEngine.GET("/volumes", volumeHandler.List)

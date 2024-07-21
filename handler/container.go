@@ -36,7 +36,7 @@ type ContainerCreationRequest struct {
 		Mapping  []struct {
 			HostIP   string `json:"host_ip"`
 			HostPort string `json:"host_port"`
-		}
+		} `json:"mapping"`
 	} `json:"port_bindings"`
 }
 
@@ -72,7 +72,7 @@ func (c *Container) Create(echoContext echo.Context) error {
 
 	volumeBinds := []string{}
 	for _, bind := range creationRequest.Volumes {
-		volumeBinds = append(envVariables, fmt.Sprintf(`%s:%s`, bind.Name, bind.Destination))
+		volumeBinds = append(volumeBinds, fmt.Sprintf(`%s:%s`, bind.Name, bind.Destination))
 	}
 
 	portBindings := nat.PortMap{}
@@ -90,9 +90,9 @@ func (c *Container) Create(echoContext echo.Context) error {
 	}
 
 	networkEndpointConfigs := map[string]*network.EndpointSettings{}
-	for _, network := range creationRequest.Networks {
-		if _, ok := networkEndpointConfigs[network]; !ok {
-			networkEndpointConfigs[network] = nil
+	for _, n := range creationRequest.Networks {
+		if _, ok := networkEndpointConfigs[n]; !ok {
+			networkEndpointConfigs[n] = &network.EndpointSettings{}
 		}
 	}
 
@@ -119,10 +119,11 @@ func (c *Container) Create(echoContext echo.Context) error {
 			Array("tags", zerolog.Arr().Str("container").Str("create").Str("container_create")).
 			Stack().
 			Msg("error creating container")
-		_ = echoContext.JSON(http.StatusBadRequest, InternalServerErrorResponseBody())
+		_ = echoContext.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
 		return err
 	}
 
+	_ = echoContext.JSON(http.StatusOK, nil)
 	return nil
 }
 
