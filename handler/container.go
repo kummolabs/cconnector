@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 	"github.com/labstack/echo/v4"
@@ -75,16 +76,23 @@ func (c *Container) Create(echoContext echo.Context) error {
 	}
 
 	portBindings := nat.PortMap{}
-	for _, network := range creationRequest.PortBindings {
-		if _, ok := portBindings[nat.Port(network.Protocol)]; !ok {
-			portBindings[nat.Port(network.Protocol)] = []nat.PortBinding{}
+	for _, port := range creationRequest.PortBindings {
+		if _, ok := portBindings[nat.Port(port.Protocol)]; !ok {
+			portBindings[nat.Port(port.Protocol)] = []nat.PortBinding{}
 		}
 
-		for _, binding := range network.Mapping {
-			portBindings[nat.Port(network.Protocol)] = append(portBindings[nat.Port(network.Protocol)], nat.PortBinding{
+		for _, binding := range port.Mapping {
+			portBindings[nat.Port(port.Protocol)] = append(portBindings[nat.Port(port.Protocol)], nat.PortBinding{
 				HostIP:   binding.HostIP,
 				HostPort: binding.HostPort,
 			})
+		}
+	}
+
+	networkEndpointConfigs := map[string]*network.EndpointSettings{}
+	for _, network := range creationRequest.Networks {
+		if _, ok := networkEndpointConfigs[network]; !ok {
+			networkEndpointConfigs[network] = nil
 		}
 	}
 
@@ -100,7 +108,9 @@ func (c *Container) Create(echoContext echo.Context) error {
 			Binds:        volumeBinds,
 			PortBindings: portBindings,
 		}, // currently nil, since there are no current usecases
-		nil, // currently nil, since there are no current usecases
+		&network.NetworkingConfig{
+			EndpointsConfig: networkEndpointConfigs,
+		}, // currently nil, since there are no current usecases
 		nil, // currently nil, since there are no current usecases
 		creationRequest.Name,
 	)
