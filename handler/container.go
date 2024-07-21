@@ -10,6 +10,8 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/labstack/echo/v4"
 	v1 "github.com/moby/docker-image-spec/specs-go/v1"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 // Requests
@@ -45,6 +47,10 @@ func (c *Container) Create(echoContext echo.Context) error {
 
 	err := json.NewDecoder(echoContext.Request().Body).Decode(&creationRequest)
 	if err != nil {
+		log.Err(err).
+			Array("tags", zerolog.Arr().Str("container").Str("create").Str("json_decode")).
+			Stack().
+			Msg("error creating container")
 		_ = echoContext.JSON(http.StatusBadRequest, BadRequestResponseBody("body contains invalid json format"))
 		return err
 	}
@@ -56,7 +62,7 @@ func (c *Container) Create(echoContext echo.Context) error {
 		envVariables = append(envVariables, fmt.Sprintf(`%s="%s"`, env.Key, env.Value))
 	}
 
-	c.dockerClient.ContainerCreate(
+	_, err = c.dockerClient.ContainerCreate(
 		echoContext.Request().Context(),
 		&container.Config{
 			Image:       imageRef,
@@ -71,6 +77,15 @@ func (c *Container) Create(echoContext echo.Context) error {
 		nil, // currently nil
 		creationRequest.Name,
 	)
+	if err != nil {
+		log.Err(err).
+			Array("tags", zerolog.Arr().Str("container").Str("create").Str("container_create")).
+			Stack().
+			Msg("error creating container")
+		_ = echoContext.JSON(http.StatusBadRequest, InternalServerErrorResponseBody())
+		return err
+	}
+
 	return nil
 }
 
