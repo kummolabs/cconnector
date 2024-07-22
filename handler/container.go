@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -41,6 +42,10 @@ type ContainerCreationRequest struct {
 	} `json:"port_bindings"`
 }
 
+type ContainerStartRequest struct {
+	ContainerId string `json:"container_id"`
+}
+
 // Handler
 
 type Container struct {
@@ -49,6 +54,41 @@ type Container struct {
 
 func NewContainer(dockerClient *client.Client) *Container {
 	return &Container{dockerClient: dockerClient}
+}
+
+func (c *Container) Start(echoContext echo.Context) error {
+	containerID := echoContext.Param("id")
+
+	if len(containerID) == 0 {
+		log.Err(errors.New("container id is empty")).
+			Array("tags", zerolog.Arr().Str("container").Str("start").Str("param")).
+			Stack().
+			Msg("error starting container")
+		_ = echoContext.JSON(http.StatusBadRequest, BadRequestResponseBody("container id cannot empty"))
+	}
+
+	err := c.dockerClient.ContainerStart(echoContext.Request().Context(), containerID, container.StartOptions{})
+	if err != nil {
+		log.Err(err).
+			Array("tags", zerolog.Arr().Str("container").Str("start").Str("container_start")).
+			Stack().
+			Msg("error starting container")
+		_ = echoContext.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
+		return err
+	}
+
+	containerJson, err := c.dockerClient.ContainerInspect(echoContext.Request().Context(), containerID)
+	if err != nil {
+		log.Err(err).
+			Array("tags", zerolog.Arr().Str("container").Str("create").Str("container_inspect")).
+			Stack().
+			Msg("error inspecting newly created container")
+		_ = echoContext.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
+		return err
+	}
+
+	_ = echoContext.JSON(http.StatusOK, containerJson)
+	return nil
 }
 
 func (c *Container) Create(echoContext echo.Context) error {
