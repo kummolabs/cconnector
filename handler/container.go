@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
@@ -18,7 +19,7 @@ import (
 // Requests
 
 type ContainerCreationRequest struct {
-	Name        string   `json:"string"`
+	Name        string   `json:"name"`
 	ImageSource string   `json:"image_source"`
 	ImageTag    string   `json:"image_tag"`
 	Labels      Label    `json:"labels"`
@@ -92,7 +93,21 @@ func (c *Container) Create(echoContext echo.Context) error {
 	networkEndpointConfigs := map[string]*network.EndpointSettings{}
 	for _, n := range creationRequest.Networks {
 		if _, ok := networkEndpointConfigs[n]; !ok {
-			networkEndpointConfigs[n] = &network.EndpointSettings{}
+			networkResp, err := c.dockerClient.NetworkInspect(echoContext.Request().Context(), n, types.NetworkInspectOptions{Verbose: true})
+			if err != nil {
+				log.Err(err).
+					Array("tags", zerolog.Arr().Str("container").Str("create").Str("network").Str("network_inspect")).
+					Stack().
+					Msg("error creating container")
+				_ = echoContext.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
+				return err
+			}
+			networkEndpointConfigs[n] = &network.EndpointSettings{
+				NetworkID: networkResp.ID,
+				Aliases: []string{
+					creationRequest.Name,
+				},
+			}
 		}
 	}
 
@@ -123,7 +138,17 @@ func (c *Container) Create(echoContext echo.Context) error {
 		return err
 	}
 
-	_ = echoContext.JSON(http.StatusOK, createResp)
+	containerJson, err := c.dockerClient.ContainerInspect(echoContext.Request().Context(), createResp.ID)
+	if err != nil {
+		log.Err(err).
+			Array("tags", zerolog.Arr().Str("container").Str("create").Str("container_inspect")).
+			Stack().
+			Msg("error inspecting newly created container")
+		_ = echoContext.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
+		return err
+	}
+
+	_ = echoContext.JSON(http.StatusOK, containerJson)
 	return nil
 }
 
