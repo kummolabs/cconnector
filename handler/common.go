@@ -32,16 +32,18 @@ func InternalServerErrorResponseBody() map[string]any {
 // MachineSpec represents information about the machine's hardware specifications
 type MachineSpec struct {
 	Ram struct {
-		Total string `json:"total"`
-		Free  string `json:"free"`
-		Used  string `json:"used"`
+		Total       string  `json:"total"`
+		Free        string  `json:"free"`
+		Used        string  `json:"used"`
+		UsedPercent float64 `json:"used_percent"`
 	} `json:"ram"`
 
 	Storage struct {
-		Total string `json:"total"`
-		Free  string `json:"free"`
-		Used  string `json:"used"`
-		INode struct {
+		Total       string  `json:"total"`
+		Free        string  `json:"free"`
+		Used        string  `json:"used"`
+		UsedPercent float64 `json:"used_percent"`
+		INode       struct {
 			Total string `json:"total"`
 			Free  string `json:"free"`
 			Used  string `json:"used"`
@@ -49,8 +51,10 @@ type MachineSpec struct {
 	} `json:"storage"`
 
 	CPU struct {
-		Cores int    `json:"cores"`
-		Model string `json:"model"`
+		Cores       int     `json:"cores"`
+		Used        float64 `json:"used"`
+		UsedPercent float64 `json:"used_percent"`
+		Model       string  `json:"model"`
 
 		Percentages []string `json:"percentages"`
 	} `json:"cpu"`
@@ -83,6 +87,9 @@ func getMachineSpecs() (MachineSpec, error) {
 		return specs, err
 	}
 
+	specs.CPU.Used = percentages[0]
+	specs.CPU.UsedPercent = (float64(len(cpuInfo)) * percentages[0]) / 100
+
 	// Convert CPU percentages to strings
 	for _, percentage := range percentages {
 		specs.CPU.Percentages = append(specs.CPU.Percentages, strconv.FormatFloat(percentage, 'f', 2, 64)+"%")
@@ -96,6 +103,7 @@ func getMachineSpecs() (MachineSpec, error) {
 	specs.Ram.Total = strconv.FormatUint(vMem.Total/(1024*1024*1024), 10) + " GB"
 	specs.Ram.Free = strconv.FormatUint(vMem.Free/(1024*1024*1024), 10) + " GB"
 	specs.Ram.Used = strconv.FormatUint(vMem.Used/(1024*1024*1024), 10) + " GB"
+	specs.Ram.UsedPercent = vMem.UsedPercent
 
 	// Get Disk information using gopsutil
 	diskUsage, err := disk.Usage("/")
@@ -108,6 +116,7 @@ func getMachineSpecs() (MachineSpec, error) {
 	specs.Storage.INode.Total = strconv.FormatUint(diskUsage.InodesTotal, 10)
 	specs.Storage.INode.Free = strconv.FormatUint(diskUsage.InodesFree, 10)
 	specs.Storage.INode.Used = strconv.FormatUint(diskUsage.InodesUsed, 10)
+	specs.Storage.UsedPercent = diskUsage.UsedPercent
 
 	// Get Host information using gopsutil
 	hostInfo, err := host.Info()
