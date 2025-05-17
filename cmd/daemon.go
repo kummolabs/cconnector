@@ -81,23 +81,56 @@ func (d *Daemon) Start() *cobra.Command {
 				return getConfig(d.configPath)
 			}
 
+			// Manager endpoints
 			managerHandler := handler.NewManager(editConfigWrapper, getConfigWrapper)
 			withAuthEngine.POST("/managers/claims", managerHandler.Claim)
 
+			// Network endpoints
 			networkHandler := handler.NewNetwork(cli)
+			withAuthEngine.GET("/networks", networkHandler.List)
 			withAuthEngine.POST("/networks", networkHandler.Create)
+			withAuthEngine.GET("/networks/:id", networkHandler.Inspect)
+			withAuthEngine.DELETE("/networks/:id", networkHandler.Remove)
+			withAuthEngine.POST("/networks/:id/connect", networkHandler.Connect)
+			withAuthEngine.POST("/networks/:id/disconnect", networkHandler.Disconnect)
+			withAuthEngine.POST("/networks/prune", networkHandler.Prune)
 
+			// Container endpoints
 			containerHandler := handler.NewContainer(cli)
 			withAuthEngine.GET("/containers", containerHandler.List)
 			withAuthEngine.POST("/containers", containerHandler.Create)
+			withAuthEngine.GET("/containers/:id", containerHandler.Inspect)
 			withAuthEngine.POST("/containers/:id/start", containerHandler.Start)
+			withAuthEngine.POST("/containers/:id/stop", containerHandler.Stop)
+			withAuthEngine.POST("/containers/:id/restart", containerHandler.Restart)
+			withAuthEngine.POST("/containers/:id/pause", containerHandler.Pause)
+			withAuthEngine.POST("/containers/:id/unpause", containerHandler.Unpause)
+			withAuthEngine.DELETE("/containers/:id", containerHandler.Remove)
+			withAuthEngine.GET("/containers/:id/logs", containerHandler.Logs)
+			withAuthEngine.POST("/containers/:id/exec", containerHandler.Exec)
 
+			// Volume endpoints
 			volumeHandler := handler.NewVolume(cli)
 			withAuthEngine.GET("/volumes", volumeHandler.List)
 			withAuthEngine.POST("/volumes", volumeHandler.Create)
+			withAuthEngine.GET("/volumes/:name", volumeHandler.Inspect)
+			withAuthEngine.DELETE("/volumes/:name", volumeHandler.Remove)
+			withAuthEngine.POST("/volumes/prune", volumeHandler.Prune)
 
+			// Image endpoints
 			imageHandler := handler.NewImage(cli)
+			withAuthEngine.GET("/images", imageHandler.List)
 			withAuthEngine.POST("/images", imageHandler.Create)
+			withAuthEngine.POST("/images/pull", imageHandler.Pull)
+			withAuthEngine.GET("/images/:id", imageHandler.Inspect)
+			withAuthEngine.DELETE("/images/:id", imageHandler.Remove)
+			withAuthEngine.POST("/images/:id/tag", imageHandler.Tag)
+			withAuthEngine.GET("/images/:id/history", imageHandler.History)
+			withAuthEngine.POST("/images/prune", imageHandler.Prune)
+
+			// Node endpoints
+			nodeHandler := handler.NewNode()
+			withAuthEngine.GET("/nodes/specs", nodeHandler.Specs)
 
 			// Start the server in a goroutine
 			go func() {
