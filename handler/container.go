@@ -542,7 +542,7 @@ func (c *Container) Stats(echoContext echo.Context) error {
 	}
 
 	// Get container stats
-	stats, err := c.dockerClient.ContainerStats(echoContext.Request().Context(), containerID, false)
+	stats, err := c.dockerClient.ContainerStatsOneShot(echoContext.Request().Context(), containerID)
 	if err != nil {
 		log.Err(err).
 			Array("tags", zerolog.Arr().Str("container").Str("stats").Str("container_stats")).
