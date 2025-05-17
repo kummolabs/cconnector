@@ -529,3 +529,38 @@ func (c *Container) Restart(echoContext echo.Context) error {
 		"id":      containerID,
 	})
 }
+
+func (c *Container) Stats(echoContext echo.Context) error {
+	containerID := echoContext.Param("id")
+
+	if len(containerID) == 0 {
+		log.Err(errors.New("container id is empty")).
+			Array("tags", zerolog.Arr().Str("container").Str("stats").Str("param")).
+			Stack().
+			Msg("error getting container stats")
+		return echoContext.JSON(http.StatusBadRequest, BadRequestResponseBody("container id cannot be empty"))
+	}
+
+	// Get container stats
+	stats, err := c.dockerClient.ContainerStats(echoContext.Request().Context(), containerID, false)
+	if err != nil {
+		log.Err(err).
+			Array("tags", zerolog.Arr().Str("container").Str("stats").Str("container_stats")).
+			Stack().
+			Msg("error getting container stats")
+		return echoContext.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
+	}
+	defer stats.Body.Close()
+
+	// Read the stats response
+	var containerStats types.Stats
+	if err := json.NewDecoder(stats.Body).Decode(&containerStats); err != nil {
+		log.Err(err).
+			Array("tags", zerolog.Arr().Str("container").Str("stats").Str("json_decode")).
+			Stack().
+			Msg("error decoding container stats")
+		return echoContext.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
+	}
+
+	return echoContext.JSON(http.StatusOK, containerStats)
+}

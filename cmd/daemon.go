@@ -101,6 +101,7 @@ func (d *Daemon) Start() *cobra.Command {
 			withAuthEngine.POST("/containers", containerHandler.Create)
 			withAuthEngine.GET("/containers/:id", containerHandler.Inspect)
 			withAuthEngine.POST("/containers/:id/start", containerHandler.Start)
+			withAuthEngine.POST("/containers/:id/stats", containerHandler.Stats)
 			withAuthEngine.POST("/containers/:id/stop", containerHandler.Stop)
 			withAuthEngine.POST("/containers/:id/restart", containerHandler.Restart)
 			withAuthEngine.POST("/containers/:id/pause", containerHandler.Pause)
