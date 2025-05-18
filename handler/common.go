@@ -87,12 +87,13 @@ func getMachineSpecs() (MachineSpec, error) {
 		return specs, err
 	}
 
-	specs.CPU.Used = percentages[0]
-	specs.CPU.UsedPercent = (float64(len(cpuInfo)) * percentages[0]) / 100
-
-	// Convert CPU percentages to strings
-	for _, percentage := range percentages {
-		specs.CPU.Percentages = append(specs.CPU.Percentages, strconv.FormatFloat(percentage, 'f', 2, 64)+"%")
+	if len(percentages) > 0 {
+		specs.CPU.UsedPercent = percentages[0]
+		specs.CPU.Used = float64(len(cpuInfo)) * percentages[0] / 100
+		// Convert CPU percentages to strings
+		for _, percentage := range percentages {
+			specs.CPU.Percentages = append(specs.CPU.Percentages, strconv.FormatFloat(percentage, 'f', 2, 64)+"%")
+		}
 	}
 
 	// Get RAM information using gopsutil
