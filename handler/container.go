@@ -42,6 +42,17 @@ type ContainerCreationRequest struct {
 			HostPort string `json:"host_port"`
 		} `json:"mapping"`
 	} `json:"port_bindings"`
+	Healthcheck struct {
+		Test        []string `json:"test"`         // Command to run to check health
+		Interval    int64    `json:"interval"`     // Time between running the check (ns|us|ms|s|m|h)
+		Timeout     int64    `json:"timeout"`      // Maximum time to allow one check to run (ns|us|ms|s|m|h)
+		Retries     int      `json:"retries"`      // Consecutive failures needed to report unhealthy
+		StartPeriod int64    `json:"start_period"` // Start period for the container to initialize before starting health-retries countdown (ns|us|ms|s|m|h)
+	} `json:"healthcheck"`
+	RestartPolicy struct {
+		Name              string `json:"name"`                // no, always, unless-stopped, on-failure
+		MaximumRetryCount int    `json:"maximum_retry_count"` // Maximum number of retries (only for on-failure)
+	} `json:"restart_policy"`
 }
 
 type ContainerStartRequest struct {
@@ -167,19 +178,29 @@ func (c *Container) Create(echoContext echo.Context) error {
 	createResp, err := c.dockerClient.ContainerCreate(
 		echoContext.Request().Context(),
 		&container.Config{
-			Image:       imageRef,
-			Env:         envVariables,
-			Labels:      creationRequest.Labels,
-			Healthcheck: &v1.HealthcheckConfig{},
-		}, // currently nil, since there are no current usecases
+			Image:  imageRef,
+			Env:    envVariables,
+			Labels: creationRequest.Labels,
+			Healthcheck: &v1.HealthcheckConfig{
+				Test:        creationRequest.Healthcheck.Test,
+				Interval:    time.Duration(creationRequest.Healthcheck.Interval),
+				Timeout:     time.Duration(creationRequest.Healthcheck.Timeout),
+				Retries:     creationRequest.Healthcheck.Retries,
+				StartPeriod: time.Duration(creationRequest.Healthcheck.StartPeriod),
+			},
+		},
 		&container.HostConfig{
 			Binds:        volumeBinds,
 			PortBindings: portBindings,
-		}, // currently nil, since there are no current usecases
+			RestartPolicy: container.RestartPolicy{
+				Name:              container.RestartPolicyMode(creationRequest.RestartPolicy.Name),
+				MaximumRetryCount: creationRequest.RestartPolicy.MaximumRetryCount,
+			},
+		},
 		&network.NetworkingConfig{
 			EndpointsConfig: networkEndpointConfigs,
-		}, // currently nil, since there are no current usecases
-		nil, // currently nil, since there are no current usecases
+		},
+		nil,
 		creationRequest.Name,
 	)
 	if err != nil {
