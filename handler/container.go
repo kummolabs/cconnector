@@ -44,10 +44,10 @@ type ContainerCreationRequest struct {
 	} `json:"port_bindings"`
 	Healthcheck struct {
 		Test        []string `json:"test"`         // Command to run to check health
-		Interval    int64    `json:"interval"`     // Time between running the check (ns|us|ms|s|m|h)
-		Timeout     int64    `json:"timeout"`      // Maximum time to allow one check to run (ns|us|ms|s|m|h)
+		Interval    string   `json:"interval"`     // Time between running the check (ns|us|ms|s|m|h)
+		Timeout     string   `json:"timeout"`      // Maximum time to allow one check to run (ns|us|ms|s|m|h)
 		Retries     int      `json:"retries"`      // Consecutive failures needed to report unhealthy
-		StartPeriod int64    `json:"start_period"` // Start period for the container to initialize before starting health-retries countdown (ns|us|ms|s|m|h)
+		StartPeriod string   `json:"start_period"` // Start period for the container to initialize before starting health-retries countdown (ns|us|ms|s|m|h)
 	} `json:"healthcheck"`
 	RestartPolicy struct {
 		Name              string `json:"name"`                // no, always, unless-stopped, on-failure
@@ -175,20 +175,20 @@ func (c *Container) Create(echoContext echo.Context) error {
 		}
 	}
 
+	containerConfig := &container.Config{
+		Image:  imageRef,
+		Env:    envVariables,
+		Labels: creationRequest.Labels,
+	}
+
+	healthcheck, err := c.parseHealthcheck(creationRequest)
+	if err == nil {
+		containerConfig.Healthcheck = &healthcheck
+	}
+
 	createResp, err := c.dockerClient.ContainerCreate(
 		echoContext.Request().Context(),
-		&container.Config{
-			Image:  imageRef,
-			Env:    envVariables,
-			Labels: creationRequest.Labels,
-			Healthcheck: &v1.HealthcheckConfig{
-				Test:        creationRequest.Healthcheck.Test,
-				Interval:    time.Duration(creationRequest.Healthcheck.Interval),
-				Timeout:     time.Duration(creationRequest.Healthcheck.Timeout),
-				Retries:     creationRequest.Healthcheck.Retries,
-				StartPeriod: time.Duration(creationRequest.Healthcheck.StartPeriod),
-			},
-		},
+		containerConfig,
 		&container.HostConfig{
 			Binds:        volumeBinds,
 			PortBindings: portBindings,
@@ -584,4 +584,29 @@ func (c *Container) Stats(echoContext echo.Context) error {
 	}
 
 	return echoContext.JSON(http.StatusOK, containerStats)
+}
+
+func (c *Container) parseHealthcheck(request ContainerCreationRequest) (v1.HealthcheckConfig, error) {
+	interval, err := time.ParseDuration(request.Healthcheck.Interval)
+	if err != nil {
+		return v1.HealthcheckConfig{}, err
+	}
+
+	timeout, err := time.ParseDuration(request.Healthcheck.Timeout)
+	if err != nil {
+		return v1.HealthcheckConfig{}, err
+	}
+
+	startPeriod, err := time.ParseDuration(request.Healthcheck.StartPeriod)
+	if err != nil {
+		return v1.HealthcheckConfig{}, err
+	}
+
+	return v1.HealthcheckConfig{
+		Test:        request.Healthcheck.Test,
+		Interval:    interval,
+		Timeout:     timeout,
+		Retries:     request.Healthcheck.Retries,
+		StartPeriod: startPeriod,
+	}, nil
 }
