@@ -36,6 +36,7 @@ type MachineSpec struct {
 		Free        string  `json:"free"`
 		Used        string  `json:"used"`
 		UsedPercent float64 `json:"used_percent"`
+		Megabytes   int     `json:"megabytes"`
 	} `json:"ram"`
 
 	Storage struct {
@@ -104,6 +105,7 @@ func getMachineSpecs() (MachineSpec, error) {
 	specs.Ram.Total = strconv.FormatUint(vMem.Total/(1024*1024*1024), 10) + " GB"
 	specs.Ram.Free = strconv.FormatUint(vMem.Free/(1024*1024*1024), 10) + " GB"
 	specs.Ram.Used = strconv.FormatUint(vMem.Used/(1024*1024*1024), 10) + " GB"
+	specs.Ram.Megabytes = int(vMem.Total / (1024 * 1024))
 	specs.Ram.UsedPercent = vMem.UsedPercent
 
 	// Get Disk information using gopsutil
