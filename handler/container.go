@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -40,10 +42,32 @@ type ContainerCreationRequest struct {
 			HostPort string `json:"host_port"`
 		} `json:"mapping"`
 	} `json:"port_bindings"`
+	Healthcheck struct {
+		Test        []string `json:"test"`         // Command to run to check health
+		Interval    string   `json:"interval"`     // Time between running the check (ns|us|ms|s|m|h)
+		Timeout     string   `json:"timeout"`      // Maximum time to allow one check to run (ns|us|ms|s|m|h)
+		Retries     int      `json:"retries"`      // Consecutive failures needed to report unhealthy
+		StartPeriod string   `json:"start_period"` // Start period for the container to initialize before starting health-retries countdown (ns|us|ms|s|m|h)
+	} `json:"healthcheck"`
+	RestartPolicy struct {
+		Name              string `json:"name"`                // no, always, unless-stopped, on-failure
+		MaximumRetryCount int    `json:"maximum_retry_count"` // Maximum number of retries (only for on-failure)
+	} `json:"restart_policy"`
 }
 
 type ContainerStartRequest struct {
 	ContainerId string `json:"container_id"`
+}
+
+type ContainerExecRequest struct {
+	Cmd          []string `json:"cmd"`
+	AttachStdin  bool     `json:"attach_stdin"`
+	AttachStdout bool     `json:"attach_stdout"`
+	AttachStderr bool     `json:"attach_stderr"`
+	Tty          bool     `json:"tty"`
+	Detach       bool     `json:"detach"`
+	WorkingDir   string   `json:"working_dir,omitempty"`
+	Env          []string `json:"env,omitempty"`
 }
 
 // Handler
@@ -151,22 +175,32 @@ func (c *Container) Create(echoContext echo.Context) error {
 		}
 	}
 
+	containerConfig := &container.Config{
+		Image:  imageRef,
+		Env:    envVariables,
+		Labels: creationRequest.Labels,
+	}
+
+	healthcheck, err := c.parseHealthcheck(creationRequest)
+	if err == nil {
+		containerConfig.Healthcheck = &healthcheck
+	}
+
 	createResp, err := c.dockerClient.ContainerCreate(
 		echoContext.Request().Context(),
-		&container.Config{
-			Image:       imageRef,
-			Env:         envVariables,
-			Labels:      creationRequest.Labels,
-			Healthcheck: &v1.HealthcheckConfig{},
-		}, // currently nil, since there are no current usecases
+		containerConfig,
 		&container.HostConfig{
 			Binds:        volumeBinds,
 			PortBindings: portBindings,
-		}, // currently nil, since there are no current usecases
+			RestartPolicy: container.RestartPolicy{
+				Name:              container.RestartPolicyMode(creationRequest.RestartPolicy.Name),
+				MaximumRetryCount: creationRequest.RestartPolicy.MaximumRetryCount,
+			},
+		},
 		&network.NetworkingConfig{
 			EndpointsConfig: networkEndpointConfigs,
-		}, // currently nil, since there are no current usecases
-		nil, // currently nil, since there are no current usecases
+		},
+		nil,
 		creationRequest.Name,
 	)
 	if err != nil {
@@ -202,4 +236,377 @@ func (c *Container) List(echoContext echo.Context) error {
 
 	// TODO: use json api standard
 	return echoContext.JSON(http.StatusOK, containers)
+}
+
+func (c *Container) Stop(echoContext echo.Context) error {
+	containerID := echoContext.Param("id")
+
+	if len(containerID) == 0 {
+		log.Err(errors.New("container id is empty")).
+			Array("tags", zerolog.Arr().Str("container").Str("stop").Str("param")).
+			Stack().
+			Msg("error stopping container")
+		return echoContext.JSON(http.StatusBadRequest, BadRequestResponseBody("container id cannot be empty"))
+	}
+
+	// Use a default timeout of 10 seconds
+	timeout := int(10 * time.Second)
+	err := c.dockerClient.ContainerStop(echoContext.Request().Context(), containerID, container.StopOptions{Timeout: &timeout})
+	if err != nil {
+		log.Err(err).
+			Array("tags", zerolog.Arr().Str("container").Str("stop").Str("container_stop")).
+			Stack().
+			Msg("error stopping container")
+		return echoContext.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
+	}
+
+	return echoContext.JSON(http.StatusOK, map[string]interface{}{
+		"message": "Container stopped successfully",
+		"id":      containerID,
+	})
+}
+
+func (c *Container) Remove(echoContext echo.Context) error {
+	containerID := echoContext.Param("id")
+
+	if len(containerID) == 0 {
+		log.Err(errors.New("container id is empty")).
+			Array("tags", zerolog.Arr().Str("container").Str("remove").Str("param")).
+			Stack().
+			Msg("error removing container")
+		return echoContext.JSON(http.StatusBadRequest, BadRequestResponseBody("container id cannot be empty"))
+	}
+
+	options := container.RemoveOptions{
+		RemoveVolumes: echoContext.QueryParam("remove_volumes") == "true",
+		RemoveLinks:   echoContext.QueryParam("remove_links") == "true",
+		Force:         echoContext.QueryParam("force") == "true",
+	}
+
+	err := c.dockerClient.ContainerRemove(echoContext.Request().Context(), containerID, options)
+	if err != nil {
+		log.Err(err).
+			Array("tags", zerolog.Arr().Str("container").Str("remove").Str("container_remove")).
+			Stack().
+			Msg("error removing container")
+		return echoContext.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
+	}
+
+	return echoContext.JSON(http.StatusOK, map[string]interface{}{
+		"message": "Container removed successfully",
+		"id":      containerID,
+	})
+}
+
+func (c *Container) Inspect(echoContext echo.Context) error {
+	containerID := echoContext.Param("id")
+
+	if len(containerID) == 0 {
+		log.Err(errors.New("container id is empty")).
+			Array("tags", zerolog.Arr().Str("container").Str("inspect").Str("param")).
+			Stack().
+			Msg("error inspecting container")
+		return echoContext.JSON(http.StatusBadRequest, BadRequestResponseBody("container id cannot be empty"))
+	}
+
+	containerInfo, err := c.dockerClient.ContainerInspect(echoContext.Request().Context(), containerID)
+	if err != nil {
+		log.Err(err).
+			Array("tags", zerolog.Arr().Str("container").Str("inspect").Str("container_inspect")).
+			Stack().
+			Msg("error inspecting container")
+		return echoContext.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
+	}
+
+	return echoContext.JSON(http.StatusOK, containerInfo)
+}
+
+func (c *Container) Pause(echoContext echo.Context) error {
+	containerID := echoContext.Param("id")
+
+	if len(containerID) == 0 {
+		log.Err(errors.New("container id is empty")).
+			Array("tags", zerolog.Arr().Str("container").Str("pause").Str("param")).
+			Stack().
+			Msg("error pausing container")
+		return echoContext.JSON(http.StatusBadRequest, BadRequestResponseBody("container id cannot be empty"))
+	}
+
+	err := c.dockerClient.ContainerPause(echoContext.Request().Context(), containerID)
+	if err != nil {
+		log.Err(err).
+			Array("tags", zerolog.Arr().Str("container").Str("pause").Str("container_pause")).
+			Stack().
+			Msg("error pausing container")
+		return echoContext.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
+	}
+
+	return echoContext.JSON(http.StatusOK, map[string]interface{}{
+		"message": "Container paused successfully",
+		"id":      containerID,
+	})
+}
+
+func (c *Container) Unpause(echoContext echo.Context) error {
+	containerID := echoContext.Param("id")
+
+	if len(containerID) == 0 {
+		log.Err(errors.New("container id is empty")).
+			Array("tags", zerolog.Arr().Str("container").Str("unpause").Str("param")).
+			Stack().
+			Msg("error unpausing container")
+		return echoContext.JSON(http.StatusBadRequest, BadRequestResponseBody("container id cannot be empty"))
+	}
+
+	err := c.dockerClient.ContainerUnpause(echoContext.Request().Context(), containerID)
+	if err != nil {
+		log.Err(err).
+			Array("tags", zerolog.Arr().Str("container").Str("unpause").Str("container_unpause")).
+			Stack().
+			Msg("error unpausing container")
+		return echoContext.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
+	}
+
+	return echoContext.JSON(http.StatusOK, map[string]interface{}{
+		"message": "Container unpaused successfully",
+		"id":      containerID,
+	})
+}
+
+func (c *Container) Logs(echoContext echo.Context) error {
+	containerID := echoContext.Param("id")
+
+	if len(containerID) == 0 {
+		log.Err(errors.New("container id is empty")).
+			Array("tags", zerolog.Arr().Str("container").Str("logs").Str("param")).
+			Stack().
+			Msg("error getting container logs")
+		return echoContext.JSON(http.StatusBadRequest, BadRequestResponseBody("container id cannot be empty"))
+	}
+
+	options := container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     false,
+		Tail:       echoContext.QueryParam("tail"),
+		Timestamps: echoContext.QueryParam("timestamps") == "true",
+	}
+
+	logsReader, err := c.dockerClient.ContainerLogs(echoContext.Request().Context(), containerID, options)
+	if err != nil {
+		log.Err(err).
+			Array("tags", zerolog.Arr().Str("container").Str("logs").Str("container_logs")).
+			Stack().
+			Msg("error getting container logs")
+		return echoContext.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
+	}
+	defer logsReader.Close()
+
+	// Stream the logs to the response
+	echoContext.Response().Header().Set(echo.HeaderContentType, "application/octet-stream")
+	echoContext.Response().WriteHeader(http.StatusOK)
+
+	buf := make([]byte, 4096)
+	for {
+		n, err := logsReader.Read(buf)
+		if n > 0 {
+			if _, err := echoContext.Response().Write(buf[:n]); err != nil {
+				log.Err(err).Msg("error writing logs chunk")
+				return nil
+			}
+			echoContext.Response().Flush()
+		}
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			log.Err(err).Msg("error reading logs")
+			return nil
+		}
+	}
+
+	return nil
+}
+
+func (c *Container) Exec(echoContext echo.Context) error {
+	containerID := echoContext.Param("id")
+	if len(containerID) == 0 {
+		log.Err(errors.New("container id is empty")).
+			Array("tags", zerolog.Arr().Str("container").Str("exec").Str("param")).
+			Stack().
+			Msg("error executing command in container")
+		return echoContext.JSON(http.StatusBadRequest, BadRequestResponseBody("container id cannot be empty"))
+	}
+
+	var execReq ContainerExecRequest
+	if err := json.NewDecoder(echoContext.Request().Body).Decode(&execReq); err != nil {
+		log.Err(err).
+			Array("tags", zerolog.Arr().Str("container").Str("exec").Str("json_decode")).
+			Stack().
+			Msg("error decoding exec request")
+		return echoContext.JSON(http.StatusBadRequest, BadRequestResponseBody("body contains invalid json format"))
+	}
+
+	// Create exec instance
+	execConfig := types.ExecConfig{
+		Cmd:          execReq.Cmd,
+		AttachStdin:  execReq.AttachStdin,
+		AttachStdout: execReq.AttachStdout,
+		AttachStderr: execReq.AttachStderr,
+		Tty:          execReq.Tty,
+		WorkingDir:   execReq.WorkingDir,
+		Env:          execReq.Env,
+	}
+
+	execID, err := c.dockerClient.ContainerExecCreate(echoContext.Request().Context(), containerID, execConfig)
+	if err != nil {
+		log.Err(err).
+			Array("tags", zerolog.Arr().Str("container").Str("exec").Str("exec_create")).
+			Stack().
+			Msg("error creating exec")
+		return echoContext.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
+	}
+
+	// If detached mode, just return the exec ID
+	if execReq.Detach {
+		err := c.dockerClient.ContainerExecStart(echoContext.Request().Context(), execID.ID, types.ExecStartCheck{
+			Detach: true,
+		})
+		if err != nil {
+			log.Err(err).
+				Array("tags", zerolog.Arr().Str("container").Str("exec").Str("exec_start")).
+				Stack().
+				Msg("error starting exec")
+			return echoContext.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
+		}
+
+		return echoContext.JSON(http.StatusOK, map[string]interface{}{
+			"message": "Command executed in detached mode",
+			"exec_id": execID.ID,
+		})
+	}
+
+	// For attached mode, stream the output
+	resp, err := c.dockerClient.ContainerExecAttach(echoContext.Request().Context(), execID.ID, types.ExecStartCheck{})
+	if err != nil {
+		log.Err(err).
+			Array("tags", zerolog.Arr().Str("container").Str("exec").Str("exec_attach")).
+			Stack().
+			Msg("error attaching to exec")
+		return echoContext.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
+	}
+	defer resp.Close()
+
+	// Stream the exec output to the response
+	echoContext.Response().Header().Set(echo.HeaderContentType, "application/octet-stream")
+	echoContext.Response().WriteHeader(http.StatusOK)
+
+	buf := make([]byte, 4096)
+	for {
+		n, err := resp.Reader.Read(buf)
+		if n > 0 {
+			if _, err := echoContext.Response().Write(buf[:n]); err != nil {
+				log.Err(err).Msg("error writing exec output")
+				return nil
+			}
+			echoContext.Response().Flush()
+		}
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			log.Err(err).Msg("error reading exec output")
+			return nil
+		}
+	}
+
+	return nil
+}
+
+func (c *Container) Restart(echoContext echo.Context) error {
+	containerID := echoContext.Param("id")
+
+	if len(containerID) == 0 {
+		log.Err(errors.New("container id is empty")).
+			Array("tags", zerolog.Arr().Str("container").Str("restart").Str("param")).
+			Stack().
+			Msg("error restarting container")
+		return echoContext.JSON(http.StatusBadRequest, BadRequestResponseBody("container id cannot be empty"))
+	}
+
+	// Default timeout of 10 seconds
+	timeout := int(10 * time.Second)
+	err := c.dockerClient.ContainerRestart(echoContext.Request().Context(), containerID, container.StopOptions{Timeout: &timeout})
+	if err != nil {
+		log.Err(err).
+			Array("tags", zerolog.Arr().Str("container").Str("restart").Str("container_restart")).
+			Stack().
+			Msg("error restarting container")
+		return echoContext.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
+	}
+
+	return echoContext.JSON(http.StatusOK, map[string]interface{}{
+		"message": "Container restarted successfully",
+		"id":      containerID,
+	})
+}
+
+func (c *Container) Stats(echoContext echo.Context) error {
+	containerID := echoContext.Param("id")
+
+	if len(containerID) == 0 {
+		log.Err(errors.New("container id is empty")).
+			Array("tags", zerolog.Arr().Str("container").Str("stats").Str("param")).
+			Stack().
+			Msg("error getting container stats")
+		return echoContext.JSON(http.StatusBadRequest, BadRequestResponseBody("container id cannot be empty"))
+	}
+
+	// Get container stats
+	stats, err := c.dockerClient.ContainerStatsOneShot(echoContext.Request().Context(), containerID)
+	if err != nil {
+		log.Err(err).
+			Array("tags", zerolog.Arr().Str("container").Str("stats").Str("container_stats")).
+			Stack().
+			Msg("error getting container stats")
+		return echoContext.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
+	}
+	defer stats.Body.Close()
+
+	// Read the stats response
+	var containerStats types.Stats
+	if err := json.NewDecoder(stats.Body).Decode(&containerStats); err != nil {
+		log.Err(err).
+			Array("tags", zerolog.Arr().Str("container").Str("stats").Str("json_decode")).
+			Stack().
+			Msg("error decoding container stats")
+		return echoContext.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
+	}
+
+	return echoContext.JSON(http.StatusOK, containerStats)
+}
+
+func (c *Container) parseHealthcheck(request ContainerCreationRequest) (v1.HealthcheckConfig, error) {
+	interval, err := time.ParseDuration(request.Healthcheck.Interval)
+	if err != nil {
+		return v1.HealthcheckConfig{}, err
+	}
+
+	timeout, err := time.ParseDuration(request.Healthcheck.Timeout)
+	if err != nil {
+		return v1.HealthcheckConfig{}, err
+	}
+
+	startPeriod, err := time.ParseDuration(request.Healthcheck.StartPeriod)
+	if err != nil {
+		return v1.HealthcheckConfig{}, err
+	}
+
+	return v1.HealthcheckConfig{
+		Test:        request.Healthcheck.Test,
+		Interval:    interval,
+		Timeout:     timeout,
+		Retries:     request.Healthcheck.Retries,
+		StartPeriod: startPeriod,
+	}, nil
 }

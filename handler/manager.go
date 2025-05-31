@@ -50,7 +50,20 @@ func (m *Manager) Claim(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
 	}
 
+	// Get machine specifications
+	specs, err := getMachineSpecs()
+	if err != nil {
+		// rollback the config if error
+		_ = m.editConfigFunction(entity.CconnectorConfig{
+			HostToken:    defaultConfig.HostToken,
+			ManagerToken: "",
+		})
+
+		return c.JSON(http.StatusInternalServerError, InternalServerErrorResponseBody())
+	}
+
 	return c.JSON(http.StatusOK, map[string]any{
-		"message": "OK",
+		"message":       "OK",
+		"machine_specs": specs,
 	})
 }
